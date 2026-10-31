@@ -15,6 +15,8 @@ class controller():
         Initialize the controller. If no joystick found, default to keyboard.
         """
         self._debug = debug
+        pygame.joystick.init()
+        pygame.init()
         joystick_count = pygame.joystick.get_count()
         self.mode = "joystick"
         if joystick_count == 0:
