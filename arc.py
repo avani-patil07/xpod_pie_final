@@ -7,11 +7,11 @@ from inverse_kinematics import inverse_kinematics
 import serial
 import numpy as np
 
-OFFSET = 40 #how far we want the foot to drag back/ forwards
-LIFT = 80 #highest point of the arc
-SWING_STEPS = 30 #points along the arc (change for smoothness)
-DRAG_STEPS = 20 #points along the drag
-STEP_DELAY = 0.05 #s between points (smaller = faster)
+OFFSET = 40         # how far we want the foot to drag back / forwards
+LIFT = 80           # highest point of the arc
+SWING_STEPS = 30    # points along the arc (change for smoothness)
+DRAG_STEPS = 20     # points along the drag
+STEP_DELAY = 0.05   # sec between points (smaller = faster)
 
 STARTING = np.array([200, -80,0]) #starting position of leg
 
@@ -22,15 +22,18 @@ def send_angles(ser, angles):
     """
     Send the angles the pi figures out to the Arduino in a string
     """
-    t1_unrounded = max(0, min(180, angles[0])) #constrain angles
+    # constrain angles
+    t1_unrounded = max(0, min(180, angles[0]))
     t2_unrounded = max(0, min(180, angles[1]))
     t3_unrounded = max(0, min(180, angles[2]))
 
+    # round angles
     t1 = round(t1_unrounded, 1)
     t2 = round(t2_unrounded, 1)
-    t3 = round(t3_unrounded, 1) #round angles
+    t3 = round(t3_unrounded, 1) 
 
-    ser.write(f"J1:{t1} J2:{t2} J3:{t3}\n".encode()) #send to arduino
+    # send to arduino
+    ser.write(f"{t1},{t2},{t3}\n".encode())
 
 def move_to(ser, point):
     """
