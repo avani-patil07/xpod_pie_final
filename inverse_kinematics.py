@@ -2,16 +2,21 @@
 Inverse Kinematics copied from the Arduino code
 """
 import math
+import numpy as np
 
 L1 = 65   # coxa length (mm)
 L2 = 152.4  # femur length (mm)
 L3 = 203.2  # tibia length (mm)
 
-def inverse_kinematics(x, y, z):
+def inverse_kinematics(current):
     """
     Returns angles relative to the servo (0-180) as (theta1, theta2, theta3),
     or None if the target is out of reach.
     """
+    x = current[0]
+    y = current[1]
+    z = current[2]
+
     # angle between x-axis and end point, mapped by the center of the servo
     theta1 = 90 - math.degrees(math.atan2(z, x))
 
@@ -31,4 +36,4 @@ def inverse_kinematics(x, y, z):
     theta2 = 90 - math.degrees(phi1 + phi2)
     theta3 = 180 - math.degrees(phi3)
 
-    return theta1, theta2, theta3
+    return np.array([theta1, theta2, theta3])
