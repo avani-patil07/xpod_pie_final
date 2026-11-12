@@ -28,7 +28,7 @@ class Kinematics:
         """
         Body parameters
 
-        alpha: angle between adjacent leg frames, in degrees
+        beta: angle between adjacent leg frames, in degrees
         radius: distance between body center point to leg base, in mm
         C: body center point, i.e. the origin
         """
@@ -143,12 +143,30 @@ class Kinematics:
         ])
 
 
+    def FK(self, theta1, theta2, theta3):
+        """
+        Calculate forward kinematics on a single leg.
+
+        Parameters:
+            theta1, theta2, theta3 - joint angles, in radians
+
+        Returns:
+            x, y, z - foot tip coordinate, in mm
+        """
+
+        x = self.L1*np.cos(theta1) + (self.L2*np.cos(theta2) + self.L3*np.cos(theta2 + theta3))*np.cos(theta1)
+        y = self.L1*np.sin(theta1) + (self.L2*np.cos(theta2) + self.L3*np.cos(theta2 + theta3))*np.sin(theta1)
+        z = self.L2*np.sin(theta2) + self.L3*np.sin(theta2 + theta3) 
+
+        return x, y, z
+
+
     def IK(self, x, y, z):
         """
         Calculate inverse kinematics on a single leg.
 
         Parameters:
-            x, y, z - target foot tip coordinate, in mm
+            x, y, z - foot tip coordinate, in mm
 
         Returns:
             theta1, theta2, theta3 - joint angles, in radians
@@ -190,40 +208,16 @@ class Kinematics:
         ])
 
 
-    def body_translation_in_leg_frame(self, leg_id, destination_body_coord):
+    def body_delta_to_leg_delta(self, leg_id, body_delta):
         """
         Convert change in body center position from body frame to leg frame.
 
         Parameters:
             leg_id - leg index (1-6)
-            destination_body_coord - body center position
+            body_delta - vector [x, y, z] representing body center translation
 
         Returns:
             Vector representing change in body center position in the selected leg frame.
-        """
-
-        #body_to_leg_rotation = self.get_leg_offset_rotation_matrix(self.leg_offset_angles[leg_id-1])
-        #body_to_leg_translation = np.array([-self.body_to_leg_offset, 0, 0])
-
-        # body_start_leg_frame = np.matmul(body_to_leg_rotation, self.body_start) + body_to_leg_translation 
-        # body_end_leg_frame = np.matmul(body_to_leg_rotation, destination_body_coord) + body_to_leg_translation
-
-        body_start_leg_frame = self.body_to_leg(leg_id, self.C)
-        body_end_leg_frame = self.body_to_leg(leg_id, destination_body_coord)
-
-        return body_start_leg_frame - body_end_leg_frame
-
-
-    def body_to_leg(self, leg_id, body_coord):
-        """
-        Convert coordinate vector from body frame into leg frame.
-
-        Parameters:
-            leg_id - leg index (1-6)
-            body_coord - coordinate in body frame
-
-        Returns:
-            Coordnate vector in leg frame
         """
         # convert leg_id (1-6) to array index (0-5)
         idx = leg_id - 1
@@ -231,23 +225,7 @@ class Kinematics:
         R = self.leg_offset_rotation_matrices[idx]
         t = self.leg_offset_translation_vectors[idx]
 
-        return R @ body_coord + t
-
-
-    def body_coord_to_foot_pos(self, body_coord):
-        """
-        Convert center point coordinate in body frame to foot coordinates in leg frame.
-        
-        Parameters:
-            body_coord - center point coordinate in body frame
-        
-        Returns:
-            Foot coordinates in the form  [[x1,y1,z1], [x2,y2,z2], [x3,y3,z3], ..., [xN, yN, zN]]
-        """
-        return np.array([
-            self.xyz_home - R @ body_coord
-            for R in self.leg_offset_rotation_matrices
-        ])
+        return R @ body_delta + t
 
 
     def get_RPY_matrix(self, roll, pitch, yaw):
@@ -293,7 +271,7 @@ class Kinematics:
 
     def RPY_to_XYZ(self, roll, pitch, yaw):
         """
-        Convert roll, pitch, yaw of body in body frame to foot positions, starting from home pose.
+        Convert roll, pitch, yaw of body in body frame to foot positions in leg frame, starting from home pose.
 
         Parameters:
             roll - roll angle, in radians
