@@ -11,7 +11,7 @@ class Kinematics:
     Leg 5 = back left,   Leg 6 = back right
     """
 
-    def __init__(self):
+    def __init__(self, lengths:np.array):
         
         """
         Leg link parameters, in mm
@@ -20,9 +20,9 @@ class Kinematics:
         L2: Femur link
         L3: Tibia link
         """
-        self.L1 = 65
-        self.L2 = 134
-        self.L3 = 173
+        self.L1 = lengths[1]
+        self.L2 = lengths[2]
+        self.L3 = lengths[3]
 
         
         """
@@ -33,8 +33,8 @@ class Kinematics:
         C: body center point, i.e. the origin
         """
         self.beta = np.radians(60)
-        self.radius = 112
-        self.C = np.array([0, 0, 0])
+        self.radius = lengths[0]
+        self.C = np.array([0, 0, 100])
 
 
         """
@@ -44,7 +44,11 @@ class Kinematics:
         self.y_home = 0
         self.z_home = -100
 
-        self.theta1_home, self.theta2_home, self.theta3_home = self.IK(self.x_home, self.y_home, self.z_home)
+        home_angles = self.IK(self.x_home, self.y_home, self.z_home)
+        if home_angles is None:
+            raise ValueError("Home foot position is not reachable with these link lengths")
+        self.theta1_home, self.theta2_home, self.theta3_home = home_angles
+        self.home_angles = np.array(home_angles)
         self.xyz_home = np.array([self.x_home, self.y_home, self.z_home])
 
         # xyz home position of each leg in body frame
@@ -160,33 +164,51 @@ class Kinematics:
 
         return x, y, z
 
+    def joint_positions(self, th1, th2, th3):
+        """Hip, knee, foot positions in the leg frame (for plotting)."""
+        hip  = np.array([self.L1*np.cos(th1), self.L1*np.sin(th1), 0])
+        r2   = self.L2*np.cos(th2)
+        knee = hip + np.array([r2*np.cos(th1), r2*np.sin(th1), self.L2*np.sin(th2)])
+        foot = np.array(self.FK(th1, th2, th3))
+        return np.array([[0, 0, 0], hip, knee, foot])
 
     def IK(self, x, y, z):
         """
         Calculate inverse kinematics on a single leg.
 
         Parameters:
-            x, y, z - foot tip coordinate, in mm
+            x, y, z - foot tip coordinate in the LEG frame, in mm
 
         Returns:
-            theta1, theta2, theta3 - joint angles, in radians
+            (theta1, theta2, theta3) in radians, or None if the point is unreachable.
+            theta3 is negative: the tibia bends DOWN relative to the femur, which is what
+            FK() assumes. (It used to be positive, which put the foot above the hip, i.e.
+            the robot appeared upside down.)
         """
 
         # calculate radius from hip to foot
         r_horiz = np.sqrt(x**2 + y**2) - self.L1
         r = np.sqrt(r_horiz**2 + z**2)
+        if r < 1e-9:
+            return None
 
-        # calculate base joint angle, theta1
+        # law of cosines; if either argument leaves [-1, 1] the target is out of reach
+        c_hip = (r**2 + self.L2**2 - self.L3**2) / (2*r*self.L2)
+        c_knee = (self.L2**2 + self.L3**2 - r**2) / (2*self.L2*self.L3)
+        if abs(c_hip) > 1 or abs(c_knee) > 1:
+            return None
+
+        # base joint angle, theta1
         theta1 = np.arctan2(y, x)
 
-        # calculate hip joint angle, theta2
-        phi1 = np.arccos((r**2 + self.L2**2 - self.L3**2) / (2*r*self.L2))
+        # hip joint angle, theta2
+        phi1 = np.arccos(c_hip)
         phi2 = np.arctan2(z, r_horiz)
         theta2 = phi1 + phi2
 
-        # calculate knee joint angle, theta3
-        phi3 = np.arccos((self.L2**2 + self.L3**2 - r**2) / (2*self.L2*self.L3))
-        theta3 = pi - phi3
+        # knee joint angle, theta3
+        phi3 = np.arccos(c_knee)
+        theta3 = phi3 - pi
 
         return theta1, theta2, theta3
 
@@ -202,10 +224,10 @@ class Kinematics:
             [[theta1_1, theta2__1, theta3_1], [theta1_2, theta2_2, theta3_2], [theta1_3, theta2_3, theta3_3], ..., [theta1_N, theta2_N, theta3_N]]
         """
 
-        return np.array([
-            self.IK(x, y, z)
-            for x, y, z in xyz_array
-        ])
+        results = [self.IK(x, y, z) for x, y, z in xyz_array]
+        if any(r is None for r in results):
+            return None
+        return np.array(results)
 
 
     def body_delta_to_leg_delta(self, leg_id, body_delta):
@@ -226,6 +248,16 @@ class Kinematics:
         t = self.leg_offset_translation_vectors[idx]
 
         return R @ body_delta + t
+
+    def body_to_leg(self, leg_id, p_body):
+        """Foot/point position in the body frame -> the same point in leg `leg_id`'s frame."""
+        return self.body_delta_to_leg_delta(leg_id, p_body)
+
+    def leg_to_body(self, leg_id, p_leg):
+        """Inverse of body_delta_to_leg_delta."""
+        i = leg_id - 1
+        R, t = self.leg_offset_rotation_matrices[i], self.leg_offset_translation_vectors[i]
+        return R.T @ (p_leg - t)
 
 
     def get_RPY_matrix(self, roll, pitch, yaw):
@@ -269,37 +301,38 @@ class Kinematics:
         return np.matmul(np.matmul(R_z, R_y), R_x)
 
 
-    def RPY_to_XYZ(self, roll, pitch, yaw):
+    def feet_body_to_leg(self, feet_body, rpy=(0, 0, 0), xyz=(0, 0, 0)):
         """
-        Convert roll, pitch, yaw of body in body frame to foot positions in leg frame, starting from home pose.
+        Convert six foot targets (body frame, planted on the ground) into leg-frame
+        coordinates for IK, optionally with the body rotated / shifted.
 
         Parameters:
-            roll - roll angle, in radians
-            pitch - pitch angle, in radians
-            yaw - yaw angle, in radians
+            feet_body - 6x3 array of foot positions in the NEUTRAL body frame (ground-fixed)
+            rpy       - (roll, pitch, yaw) of the body, radians
+            xyz       - body translation, mm
+
+        If the body rotates by R, ground-fixed points appear rotated by R^T in the body
+        frame, hence the transpose (RPY_to_XYZ used R, which turned the feet the wrong way).
+        """
+        R = self.get_RPY_matrix(*rpy)
+        view = (np.asarray(feet_body, dtype=float) - np.asarray(xyz, dtype=float)) @ R  # = R.T @ p for each row
+        return np.array([self.body_to_leg(i + 1, p) for i, p in enumerate(view)])
+
+
+    def RPY_to_XYZ(self, roll, pitch, yaw):
+        """
+        Convert roll, pitch, yaw of body in body frame to foot positions in leg frame,
+        starting from home pose (feet stay planted, body tilts).
 
         Returns:
-            Foot coordinates in the form  [[x1,y1,z1], [x2,y2,z2], [x3,y3,z3], ..., [xN, yN, zN]]     
+            Foot coordinates in the form  [[x1,y1,z1], ..., [x6,y6,z6]]
         """
-
-        RPY_matrix = self.get_RPY_matrix(roll, pitch, yaw)
-
-        body_to_leg_rotation_matrices = np.array([
-            leg_offset_rotation_matrix @ RPY_matrix
-            for leg_offset_rotation_matrix in self.leg_offset_rotation_matrices
-        ])
-
-        return np.array([
-            rotation_matrix @ xyz_home + translation_vector
-
-            for rotation_matrix, xyz_home, translation_vector in zip(
-                body_to_leg_rotation_matrices,
-                self.leg_xyz_home_in_body,
-                self.leg_offset_translation_vectors
-            )
-        ])
+        return self.feet_body_to_leg(self.leg_xyz_home_in_body, (roll, pitch, yaw))
 
 
 
 if __name__ == "__main__":
-    instance = Kinematics()
+    # quick self-test: FK(IK(p)) should return p
+    k = Kinematics(np.array([111.9, 80, 152.4, 203.2]))
+    p = np.array([170.0, 20.0, -100.0])
+    print(p, "->", np.round(k.FK(*k.IK(*p)), 3))

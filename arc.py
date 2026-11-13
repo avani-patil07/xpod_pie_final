@@ -52,7 +52,7 @@ def drag_to(ser, start, target):
     """
     for i in range(1, DRAG_STEPS+1):
         t = i/ DRAG_STEPS
-        point = start + (target-start) *t #moves x,y,z the same fraction
+        point = start + (target-start) *t #moves x, y, z the same fraction
         move_to(ser, point)
         time.sleep(STEP_DELAY)
 

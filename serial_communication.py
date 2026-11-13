@@ -5,7 +5,7 @@ PORT = 'COM3'
 BAUD = 115200
 
 class channel:
-    def __init__(self, name:str, port:str, baud_rate:int, debug:bool=True):
+    def __init__(self, name:str, port:str, baud_rate:int, debug:bool=False):
         self.debug = debug
         self._name = name
         self._port = port
