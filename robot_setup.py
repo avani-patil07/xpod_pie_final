@@ -163,7 +163,8 @@ if __name__ == "__main__":
     lengths = np.array([111.9, 80, 152.4, 203.2])
     my_kinematics = kinematics.Kinematics(lengths)
     my_plotter = PlotBackend(limits=[-300, 300])
-    my_robot = Robot(my_kinematics, backends=[my_plotter])
+    my_serial = SerialBackend(None, 115200, True)
+    my_robot = Robot(my_kinematics, backends=[my_serial])
 
     for i in range(1, 1000):
         my_robot.set_pose(roll=0, pitch=0.0, yaw=1/3*np.sin(2*i / 180 * 2 * np.pi))

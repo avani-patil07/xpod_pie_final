@@ -2,7 +2,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (registers the 3D projection)
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-
+import serial
+import time
 
 class PlotBackend:
     """Live 3D view in the body frame: the hexagonal body stays put, the legs move."""
@@ -76,46 +77,28 @@ class PlotBackend:
 
 
 class SerialBackend:
-    """
-    Sends servo angles to the Arduino. `channel` is anything with .send(str)
-    (e.g. your serial_communication.channel).
+    def __init__(self, port:str, baud_rate:int, debug:bool=False):
+        self.debug = debug
+        self._port = port
+        self._baud_rate = baud_rate
+        self._ser = serial.Serial(self._port, self._baud_rate, timeout=1) if port else None
+        time.sleep(2)  # Wait for microcontroller to reset and initialize
 
-    mode="frame"   : one line, all 18 angles: "a,b,c,a,b,c,...\\n" (legs 1..6)   <- best for walking
-    mode="per_leg" : six lines per update:    "leg,a,b,c\\n"
-    mode="legacy"  : your current single-leg sketch: "a,b,c\\n" for ONE leg (legacy_leg)
+    @property
+    def port(self):
+        return self._port
 
-    servo = home_servo + sign * degrees(theta - theta_home) + trim, clipped to 0..180.
-    The standing pose is servo 90/90/90; set `sign` (-1) for mirrored servos, `trim` for horn offsets.
-    """
-
-    def __init__(self, channel, mode="frame", legacy_leg=1, home_servo=90.0, sign=None, trim=None):
-        self.ch = channel
-        self.mode = mode
-        self.legacy_leg = legacy_leg
-        self.home_servo = home_servo
-        self.sign = np.ones((6, 3)) if sign is None else np.asarray(sign, dtype=float)
-        self.trim = np.zeros((6, 3)) if trim is None else np.asarray(trim, dtype=float)
-
-    def to_servo(self, angles_rad, home_angles):
-        raw = self.home_servo + self.sign * np.degrees(angles_rad - home_angles) + self.trim
-        return np.clip(raw, 0, 180).round(1)
-
-    @staticmethod
-    def _fmt(values):
-        return ",".join(f"{v:.1f}" for v in values)
-
+    @property
+    def baud_rate(self):
+        return self._baud_rate
+    
     def update(self, robot):
-        servo = self.to_servo(robot.angles, robot.kin.home_angles)
-        if self.mode == "frame":
-            self.ch.send(self._fmt(servo.ravel()))
-        elif self.mode == "per_leg":
-            for leg_id, row in enumerate(servo, start=1):
-                self.ch.send(f"{leg_id},{self._fmt(row)}")
-        elif self.mode == "legacy":
-            self.ch.send(self._fmt(servo[self.legacy_leg - 1]))
-        else:
-            raise ValueError(f"unknown mode {self.mode!r}")
-
-    def close(self):
-        if hasattr(self.ch, "close"):
-            self.ch.close()
+        message = ''
+        leg_count, _ = robot.angles.shape
+        for i in range(0, leg_count):
+            joint_values = list(str(round(np.degrees(x), 2)) for x in robot.angles[i].tolist())
+            message += ",".join(joint_values) + ";"
+        message += '\n'
+        # self._ser.write(f"{message}\n".encode())
+        if self.debug:
+            print(f"Sent: {message}")
