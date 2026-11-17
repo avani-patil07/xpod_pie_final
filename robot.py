@@ -1,6 +1,6 @@
 
-import wifi_communication
-import controller
+import RasPi.wifi_communication as wifi_communication
+import RasPi.controller as controller
 
 if __name__ == "__main__":
     try:

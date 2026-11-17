@@ -3,7 +3,7 @@ Gets one leg to move in an arc
 """
 import math
 import time
-from inverse_kinematics import inverse_kinematics
+from obsolete.inverse_kinematics import inverse_kinematics
 import serial
 import numpy as np
 
