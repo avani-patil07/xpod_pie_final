@@ -3,11 +3,11 @@ Runs the gait on every leg, through the Robot + backends pipeline
 """
 import time
 import numpy as np
-from RasPi.kinematics import Kinematics
-from RasPi.calibration import LENGTHS
-from RasPi.gait import Gait, CYCLE_TIME
-from RasPi.robot_setup import Robot
-from RasPi.backends import SerialBackend, PlotBackend
+from kinematics import Kinematics
+from calibration import LENGTHS
+from gait import Gait, CYCLE_TIME
+from robot_setup import Robot
+from backends import SerialBackend, PlotBackend
 
 PORT = 'COM3'
 BAUD = 115200

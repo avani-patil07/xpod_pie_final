@@ -4,7 +4,7 @@ from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (registers the 3D project
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import serial
 import time
-from RasPi.calibration import thetas_to_servo
+from calibration import thetas_to_servo
 
 class PlotBackend:
     """Live 3D view in the body frame: the hexagonal body stays put, the legs move."""
