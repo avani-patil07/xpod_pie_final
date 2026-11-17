@@ -6,10 +6,10 @@ import numpy as np
 import serial
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
-import kinematics
-from calibration import LENGTHS, thetas_to_servo
+import RasPi.kinematics as kinematics
+from RasPi.calibration import LENGTHS, thetas_to_servo
 
-from backends import *
+from RasPi.backends import *
 
 class Robot:
     def __init__(self, kin, backends=(), enforce_servo_limits=True):

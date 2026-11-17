@@ -3,7 +3,7 @@ The gait motions for the legs
 """
 
 import numpy as np
-from calibration import CALIBRATION, LENGTHS, thetas_to_servo  # noqa: F401  (re-exported)
+from RasPi.calibration import CALIBRATION, LENGTHS, thetas_to_servo  # noqa: F401  (re-exported)
 
 #step parameters
 OFFSET  = 40 #how far behind home and how far in front (80 in total)
@@ -88,7 +88,7 @@ class Gait:
 
 
 if __name__ == "__main__":
-    from kinematics import Kinematics
+    from RasPi.kinematics import Kinematics
     gait = Gait(Kinematics(LENGTHS))
     for leg, angles in gait.servo_frame(gait.home_body, range(1, 7)).items():
         print(f"Leg {leg} home servo angles: {np.round(angles, 1)}")

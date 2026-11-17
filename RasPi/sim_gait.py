@@ -1,9 +1,9 @@
 import time
-from kinematics import Kinematics
-from calibration import LENGTHS
-from gait import Gait, CYCLE_TIME
-from robot_setup import Robot
-from backends import PlotBackend, SerialBackend
+from RasPi.kinematics import Kinematics
+from RasPi.calibration import LENGTHS
+from RasPi.gait import Gait, CYCLE_TIME
+from RasPi.robot_setup import Robot
+from RasPi.backends import PlotBackend, SerialBackend
 
 kin = Kinematics(LENGTHS)
 gait = Gait(kin)
