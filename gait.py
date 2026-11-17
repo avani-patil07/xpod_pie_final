@@ -3,10 +3,7 @@ The gait motions for the legs
 """
 
 import numpy as np
-from kinematics import Kinematics
-
-LENGTHS = np.array([111.9, 80, 152.4, 203.2]) #radius, coxa, femur, tibia
-kin = Kinematics(LENGTHS)
+from calibration import CALIBRATION, LENGTHS, thetas_to_servo  # noqa: F401  (re-exported)
 
 #step parameters
 OFFSET  = 40 #how far behind home and how far in front (80 in total)
@@ -20,13 +17,6 @@ FORWARD = np.array([0.0, 1.0, 0.0]) #positive y is the front of the robot
 #legs 2, 4, 6 start on ground, groups are a half cycle apart
 PHASE_OFFSETS = {1: 0.25, 2: 0.75, 3: 0.25, 4: 0.75, 5: 0.25, 6: 0.75}
 
-DEFAULT_CAL = [(90, -1, 0), #J1 hip straight out at 90
-               (90, -1, 0), #J2 femur horizontal
-               (0, -1, 0)]  #J3 knee
-
-CALIBRATION = {leg: list(DEFAULT_CAL) for leg in range(1, 7)}
-
-HOME_BODY = kin.leg_xyz_home_in_body.astype(float)
 
 def smoothen(u):
     """
@@ -34,64 +24,71 @@ def smoothen(u):
     """
     return (1-np.cos(np.pi*u)) /2
 
-def foot_in_body(leg_id, phase):
-    """
-    where the leg should be at a certain phase in the body frame
-    """
-    p = (phase + PHASE_OFFSETS[leg_id]) % 1.0
-    home = HOME_BODY[leg_id -1]
-    back = home- FORWARD * OFFSET
-    front = home + FORWARD * OFFSET
 
-    if p < SWING_FRACTION: 
-        u = p / SWING_FRACTION
-        lift = np.array([0.0, 0.0, LIFT *np.sin(np.pi*u)])
-        return back + (front - back) * smoothen(u) + lift
+class Gait:
+    """
+    Gait generator. Uses the Kinematics instance the Robot already has, so the
+    link lengths / home pose are defined in exactly one place.
+    """
 
-    u = (p-SWING_FRACTION)/ (1-SWING_FRACTION)
-    return front + (back-front)*u
+    def __init__(self, kin):
+        self.kin = kin
+        self.home_body = kin.leg_xyz_home_in_body.astype(float)
 
-def feet_at(phase):
-    """
-    all six feet at a phase in the body frame
-    """
-    return np.array([foot_in_body(leg,phase) for leg in range(1,7)])
+    def foot_in_body(self, leg_id, phase):
+        """
+        where the leg should be at a certain phase in the body frame
+        """
+        p = (phase + PHASE_OFFSETS[leg_id]) % 1.0
+        home = self.home_body[leg_id -1]
+        back = home- FORWARD * OFFSET
+        front = home + FORWARD * OFFSET
 
-def transition_feet(u):
-    """
-    moves the foot from home to the gait starting position
-    """
-    return HOME_BODY + (feet_at(0)-HOME_BODY) * smoothen(u)
+        if p < SWING_FRACTION:
+            u = p / SWING_FRACTION
+            lift = np.array([0.0, 0.0, LIFT *np.sin(np.pi*u)])
+            return back + (front - back) * smoothen(u) + lift
 
-def leg_servo_angles(leg_id, point_leg):
-    """
-    leg frame to servo degrees
-    """
-    thetas = kin.IK(*point_leg)
-    if thetas is None:
-        return None
+        u = (p-SWING_FRACTION)/ (1-SWING_FRACTION)
+        return front + (back-front)*u
 
-    angles = [center + direction *np.degrees(theta) + trim 
-              for theta, (center, direction, trim) in zip(thetas, CALIBRATION[leg_id])
-              ]
+    def feet_at(self, phase):
+        """
+        all six feet at a phase in the body frame
+        """
+        return np.array([self.foot_in_body(leg,phase) for leg in range(1,7)])
 
-    if any(a<0 or a>180 for a in angles):
-        return None
-    return angles
+    def transition_feet(self, u):
+        """
+        moves the foot from home to the gait starting position
+        """
+        return self.home_body + (self.feet_at(0)-self.home_body) * smoothen(u)
 
-def servo_frame(feet_body, legs):
-    """
-    body frame to leg id
-    """
-    feet_leg = kin.feet_body_to_leg(feet_body)
-    frame = {}
-    for leg in legs:
-        angles = leg_servo_angles(leg, feet_leg[leg-1])
-        if angles is None:
-            raise ValueError(f"Leg {leg} can't reach")
-        frame[leg] = angles
-    return frame
+    def leg_servo_angles(self, leg_id, point_leg):
+        """
+        leg frame to servo degrees
+        """
+        thetas = self.kin.IK(*point_leg)
+        if thetas is None:
+            return None
+        return thetas_to_servo(leg_id, thetas)
+
+    def servo_frame(self, feet_body, legs):
+        """
+        body frame to leg id
+        """
+        feet_leg = self.kin.feet_body_to_leg(feet_body)
+        frame = {}
+        for leg in legs:
+            angles = self.leg_servo_angles(leg, feet_leg[leg-1])
+            if angles is None:
+                raise ValueError(f"Leg {leg} can't reach")
+            frame[leg] = angles
+        return frame
+
 
 if __name__ == "__main__":
-    for leg, angles in servo_frame(HOME_BODY, range(1, 7)).items():
+    from kinematics import Kinematics
+    gait = Gait(Kinematics(LENGTHS))
+    for leg, angles in gait.servo_frame(gait.home_body, range(1, 7)).items():
         print(f"Leg {leg} home servo angles: {np.round(angles, 1)}")

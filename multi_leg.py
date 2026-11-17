@@ -1,27 +1,30 @@
 """
-Runs the gait on every leg
+Runs the gait on every leg, through the Robot + backends pipeline
 """
 import time
-import serial
-import gait
+import numpy as np
+from kinematics import Kinematics
+from calibration import LENGTHS
+from gait import Gait, CYCLE_TIME
+from robot_setup import Robot
+from backends import SerialBackend, PlotBackend
 
 PORT = 'COM3'
 BAUD = 115200
+USE_PLOT = True #live 3D view; drawing is slow, so leave off for real-time hardware runs
 
-LEGS = [1, 2, 3, 4, 5, 6]
 CYCLES = 3 #how many steps to take
 TICK = 0.02 #seconds between updates 50 per second
 TRANSITION_TIME = 1.0 #seconds to go in between standing and gait start
 
-def send(ser, feet_body):
+def send(robot, feet_body):
     """
-    send the coordinates for the legs
+    send the coordinates for the legs (IK -> robot.angles -> every backend)
     """
-    frame = gait.servo_frame(feet_body, LEGS)
-    parts = [f"L{leg}:{a[0]:.1f},{a[1]:.1f},{a[2]:.1f}" for leg, a in frame.items()]
-    ser.write((";".join(parts) + "\n").encode())
+    if not robot.set_feet(feet_body):
+        raise ValueError("Pose rejected: unreachable or outside servo limits")
 
-def run_timed(ser, duration, feet_function):
+def run_timed(robot, duration, feet_function):
     """
     call feet_function over a duration
     """
@@ -29,37 +32,42 @@ def run_timed(ser, duration, feet_function):
     tick = 0
     while True:
         u = min((time.monotonic()-start) / duration, 1.0) #based on time elapsed
-        send(ser, feet_function(u))
+        send(robot, feet_function(u))
         if u >= 1.0:
             break
         tick += 1
         time.sleep(max(0, start + tick * TICK - time.monotonic())) #wait for next time tick
 
-def walk_feet(u):
-    """
-    turn u into gait phase
-    """
-    return gait.feet_at(u*CYCLES)
-
-def return_home_feet(u):
-    """
-    from pose to home
-    """
-    return gait.transition_feet(1-u)
-
 def main():
-    ser = serial.Serial(PORT, BAUD, timeout=1)
-    time.sleep(2)
+    kin = Kinematics(LENGTHS)
+    gait = Gait(kin)
+
+    backends = [SerialBackend(PORT, BAUD)]
+    if USE_PLOT:
+        backends.append(PlotBackend())
+    robot = Robot(kin, backends=backends)
+
+    def walk_feet(u):
+        """
+        turn u into gait phase
+        """
+        return gait.feet_at(u*CYCLES)
+
+    def return_home_feet(u):
+        """
+        from pose to home
+        """
+        return gait.transition_feet(1-u)
 
     try:
-        send(ser, gait.HOME_BODY)
+        send(robot, gait.home_body)
         time.sleep(1)
 
-        run_timed(ser, TRANSITION_TIME, gait.transition_feet) #home to start
-        run_timed(ser, CYCLES * gait.CYCLE_TIME, walk_feet) #walk
-        run_timed(ser, TRANSITION_TIME, return_home_feet) #from start to home
+        run_timed(robot, TRANSITION_TIME, gait.transition_feet) #home to start
+        run_timed(robot, CYCLES * CYCLE_TIME, walk_feet) #walk
+        run_timed(robot, TRANSITION_TIME, return_home_feet) #from start to home
     finally:
-        ser.close()
+        robot.close()
 
 if __name__ == "__main__":
     main()

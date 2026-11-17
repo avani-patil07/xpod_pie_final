@@ -4,6 +4,7 @@ from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (registers the 3D project
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import serial
 import time
+from calibration import thetas_to_servo
 
 class PlotBackend:
     """Live 3D view in the body frame: the hexagonal body stays put, the legs move."""
@@ -77,12 +78,14 @@ class PlotBackend:
 
 
 class SerialBackend:
-    def __init__(self, port:str, baud_rate:int, debug:bool=False):
+    def __init__(self, port:str, baud_rate:int, debug:bool=False, legacy_format:bool=False):
         self.debug = debug
+        self.legacy_format = legacy_format   # old "a,b,c;a,b,c;...", otherwise "L1:a,b,c;L2:..."
         self._port = port
         self._baud_rate = baud_rate
         self._ser = serial.Serial(self._port, self._baud_rate, timeout=1) if port else None
-        time.sleep(2)  # Wait for microcontroller to reset and initialize
+        if self._ser:
+            time.sleep(2)  # Wait for microcontroller to reset and initialize
 
     @property
     def port(self):
@@ -91,14 +94,21 @@ class SerialBackend:
     @property
     def baud_rate(self):
         return self._baud_rate
-    
+
     def update(self, robot):
-        message = ''
         leg_count, _ = robot.angles.shape
+        parts = []
         for i in range(0, leg_count):
-            joint_values = list(str(round(np.degrees(x), 2)) for x in robot.angles[i].tolist())
-            message += ",".join(joint_values) + ";"
-        message += '\n'
-        # self._ser.write(f"{message}\n".encode())
+            # kinematic radians -> calibrated servo degrees (clamped to 0-180)
+            servo = thetas_to_servo(i + 1, robot.angles[i], clamp=True)
+            joint_values = ",".join(f"{a:.1f}" for a in servo)
+            parts.append(joint_values if self.legacy_format else f"L{i + 1}:{joint_values}")
+        message = ";".join(parts) + (";" if self.legacy_format else "") + "\n"
+        if self._ser:
+            self._ser.write(message.encode())
         if self.debug:
-            print(f"Sent: {message}")
+            print(f"Sent: {message}", end="")
+
+    def close(self):
+        if self._ser:
+            self._ser.close()
