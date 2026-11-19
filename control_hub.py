@@ -1,0 +1,18 @@
+
+import RasPi.wifi_communication as wifi_communication
+import RasPi.controller as controller
+import time
+
+if __name__ == "__main__":
+    try:
+        node = wifi_communication.UDPNode(broadcast_ip='192.168.1.168', send_port=5001, listen_port=5002, name="Control Hub")
+        node.start_listening()
+        while True:
+            robot_controller = controller.controller()
+            input = robot_controller.get_input()
+            formatted_input = ", ".join(str(round(x, 2)) for x in input)
+            print(formatted_input)
+            node.broadcast(formatted_input)
+            time.sleep(1)   
+    except KeyboardInterrupt:
+        print("Exiting. . .")
