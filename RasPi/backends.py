@@ -83,7 +83,7 @@ class SerialBackend:
         self.legacy_format = legacy_format   # old "a,b,c;a,b,c;...", otherwise "L1:a,b,c;L2:..."
         self._port = port
         self._baud_rate = baud_rate
-        self._ser = serial.Serial(self._port, self._baud_rate, timeout=1) if port else None
+        self._ser = serial.Serial(self._port, self._baud_rate, timeout=1, write_timeout=0.1) if port else None
         if self._ser:
             time.sleep(2)  # Wait for microcontroller to reset and initialize
 
@@ -105,7 +105,11 @@ class SerialBackend:
             parts.append(joint_values if self.legacy_format else f"L{i + 1}:{joint_values}")
         message = ";".join(parts) + (";" if self.legacy_format else "") + "\n"
         if self._ser:
-            self._ser.write(message.encode())
+            try:
+                self._ser.write(message.encode())
+            except serial.SerialTimeoutException:
+                self._ser.reset_output_buffer()   # drop the stale frame, keep going
+                print("Serial write timed out - frame dropped")
         if self.debug:
             print(f"Sent: {message}", end="")
 

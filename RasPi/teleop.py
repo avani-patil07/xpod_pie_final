@@ -9,7 +9,7 @@ from wifi_communication import UDPNode
 
 # 255.255.255.255 reaches every device on the network. If it doesn't (VPN, several adapters),
 # use your subnet's broadcast address (e.g. 192.168.1.255) or the Pi's own IP.
-TARGET_IP = '255.255.255.255'
+TARGET_IP = '127.0.0.1'
 SEND_PORT = 5001      # the Pi listens here
 LISTEN_PORT = 5002    # the Pi's status messages arrive here
 RATE_HZ = 50
