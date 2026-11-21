@@ -42,7 +42,7 @@ class Kinematics:
         """
         self.x_home = 170
         self.y_home = 0
-        self.z_home = -150
+        self.z_home = -275
 
         home_angles = self.IK(self.x_home, self.y_home, self.z_home)
         if home_angles is None:
